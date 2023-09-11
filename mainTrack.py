@@ -36,6 +36,7 @@ class Yolov8:
         self.detect_obj_list=detect_obj
         # Load the class names from the COCO dataset
         self.classes = yaml_load(check_yaml('coco128.yaml'))['names']
+        self.classes = yaml_load('./yolov8_data.yml')['names']
         # Generate a color palette for the classes
         self.color_palette = np.random.uniform(0, 255, size=(len(self.classes), 3))
         
@@ -296,17 +297,17 @@ if __name__ == '__main__':
     # Create an argument parser to handle command-line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default='yolov8s.onnx', help='Input your ONNX model.')
-    parser.add_argument('--video', type=str, default=str('./zHUt2qWqmztC0qoGGa0G_720p.mp4'), help='Path to input video.')
+    parser.add_argument('--video', type=str, default=str('./test3.mp4'), help='Path to input video.')
     parser.add_argument('--outputv', type=str, default=str('./output.avi'), help='Path to output video.')
-    parser.add_argument('--conf-thres', type=float, default=0.5, help='Confidence threshold')
-    parser.add_argument('--iou-thres', type=float, default=0.5, help='NMS IoU threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.2, help='Confidence threshold')
+    parser.add_argument('--iou-thres', type=float, default=0.2, help='NMS IoU threshold')
     args = parser.parse_args()
 
     # Check the requirements and select the appropriate backend (CPU or GPU)
     check_requirements('onnxruntime-gpu' if torch.cuda.is_available() else 'onnxruntime')
 
     # Create an instance of the Yolov8 class with the specified arguments
-    detection = Yolov8(args.model,args.conf_thres, args.iou_thres,detect_obj=[2,7])
+    detection = Yolov8(args.model,args.conf_thres, args.iou_thres,detect_obj=None)
 
     # Perform object detection and obtain the output image
     detection.run(args.video,args.outputv)
