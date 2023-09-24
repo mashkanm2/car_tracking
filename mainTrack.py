@@ -8,14 +8,14 @@ import torch
 from ultralytics.utils import yaml_load
 from ultralytics.utils.checks import check_requirements, check_yaml
 
-from deep_sort.detection import Detection as ddet
-from tracking_tools import generate_detections as gdet
+from track_KF.deep_sort.detection import Detection as ddet
+from track_KF.tracking_tools import generate_detections as gdet
 
-from deep_sort import preprocessing
-from deep_sort.tracker import Tracker
-from deep_sort import nn_matching
-from deep_sort.kalman_filter import KalmanFilter
-from deep_sort.detection import Detection as Detection_Face
+from track_KF.deep_sort import preprocessing
+from track_KF.deep_sort.tracker import Tracker
+from track_KF.deep_sort import nn_matching
+from track_KF.deep_sort.kalman_filter import KalmanFilter
+from track_KF.deep_sort.detection import Detection as Detection_Face
 
 
 class Yolov8:
@@ -35,8 +35,8 @@ class Yolov8:
         self.iou_thres = iou_thres
         self.detect_obj_list=detect_obj
         # Load the class names from the COCO dataset
-        self.classes = yaml_load(check_yaml('coco128.yaml'))['names']
-        self.classes = yaml_load('./yolov8_data.yml')['names']
+        # self.classes = yaml_load(check_yaml('coco128.yaml'))['names']
+        self.classes = yaml_load('./weight/yolov8_data.yml')['names']
         # Generate a color palette for the classes
         self.color_palette = np.random.uniform(0, 255, size=(len(self.classes), 3))
         
@@ -63,7 +63,7 @@ class Yolov8:
         max_cosine_distance = 0.5
         nn_budget = None
         nms_max_overlap = 0.3
-        file_path_trk = './mars-small128.pb'
+        file_path_trk = './track_KF/mars-small128.pb'
         self.encoder_tracking=gdet.create_box_encoder(file_path_trk,batch_size=1)
         metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
         self.obj_tracker = Tracker(metric)
@@ -210,13 +210,14 @@ class Yolov8:
             # # Draw the detection on the input image
             # self.draw_detections(frame, box, score, class_id)
             x1, y1, w, h = box
-            
+            label = f'{self.classes[class_id]}'
+
             bbox = [int(x1),int(y1),int(x1)+int(w),int(y1)+int(h)]
             bboxdd = [int(x1),int(y1),int(w),int(h)]
 
             features = self.encoder_tracking(frame,np.array([bboxdd]))
             # f["face_img"]=faceimg
-            detections.append(Detection_Face(bboxdd, score,"car", features[0]))
+            detections.append(Detection_Face(bboxdd, score,label, features[0]))
 
         # Call the tracker
         self.obj_tracker.predict()
@@ -229,13 +230,12 @@ class Yolov8:
             # indexIDs.append(int(track.track_id))
             # counter.append(int(track.track_id))
             boxe_ = track.to_tlbr()
-            print(boxe_)
             cv2.rectangle(frame, (int(boxe_[0]), int(boxe_[1])), (int(
                 boxe_[2]), int(boxe_[3])), (255, 0, 0), 2)
 
-            # class_name="face"
+            class_name="face"
             # cv2.rectangle(frame, (int(boxe_[0]), int(boxe_[1]-30)), (int(boxe_[0])+(len(class_name)+len(str(track.track_id)))*17, int(boxe_[1])), color, -1)
-            cv2.putText(frame, "car-" + str(track.track_id),(int(boxe_[0]), int(boxe_[1])),0, 0.75, (255,255,255),2)
+            cv2.putText(frame, str(track.class_name)+"-" + str(track.track_id),(int(boxe_[0]), int(boxe_[1])),0, 0.75, (255,255,255),2)
 
 
         # Return the modified input image
@@ -258,15 +258,20 @@ class Yolov8:
             print("Error opening video stream or file")
             return
         
-        out = cv2.VideoWriter(save_path,cv2.VideoWriter_fourcc(*'DIVX'),30, (640,480))
+        ret,img_in=cap.read()
+        if ret:
+            # Get the height and width of the input image
+            self.img_height, self.img_width = img_in.shape[:2]
+        
+        out_img_h=self.img_height//2
+        out_img_w=self.img_width//2
+            
+        out = cv2.VideoWriter(save_path,cv2.VideoWriter_fourcc(*'DIVX'),30, (out_img_w,out_img_h))
 
         # Read until video is completed
         while(cap.isOpened()):
             ret,img_in=cap.read()
             if ret:
-                # Get the height and width of the input image
-                self.img_height, self.img_width = img_in.shape[:2]
-                
                 # Preprocess the image data
                 img_data = self.preprocess(img_in)
 
@@ -275,7 +280,7 @@ class Yolov8:
                 # Perform post-processing on the outputs to obtain output image.
                 output_image = self.postprocess(img_in, outputs)  # output image
                 # resize image as frame size
-                output_image=cv2.resize(output_image,[640,480])
+                output_image=cv2.resize(output_image,[out_img_w,out_img_h])
                 # Display the output image in a window
                 cv2.imshow('Output', output_image)
                 
@@ -296,9 +301,9 @@ class Yolov8:
 if __name__ == '__main__':
     # Create an argument parser to handle command-line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='yolov8s.onnx', help='Input your ONNX model.')
-    parser.add_argument('--video', type=str, default=str('./test3.mp4'), help='Path to input video.')
-    parser.add_argument('--outputv', type=str, default=str('./output.avi'), help='Path to output video.')
+    parser.add_argument('--model', type=str, default='./weight/yolov8s.onnx', help='Input your ONNX model.')
+    parser.add_argument('--video', type=str, default=str('./datas/test6.mp4'), help='Path to input video.')
+    parser.add_argument('--outputv', type=str, default=str('./datas/output_001.avi'), help='Path to output video.')
     parser.add_argument('--conf-thres', type=float, default=0.2, help='Confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.2, help='NMS IoU threshold')
     args = parser.parse_args()
