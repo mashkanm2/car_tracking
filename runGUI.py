@@ -2,7 +2,8 @@ import os
 import cv2
 import random
 import numpy as np
-from gui_utils.yoloModel import Yolov8
+# from yoloModel_onnx import Yolov8
+from yoloModel_pt import Yolov8
 
 
 from kivy.app import App
@@ -16,67 +17,25 @@ from kivy.graphics.texture import Texture
 from kivy.properties import StringProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.graphics import Color, Ellipse, Line
+import time
+
+from boxmot.utils import ROOT, WEIGHTS
 
 
-
-ARGS = {
-    "model":"./weight/yolov8s.onnx",      # Input your ONNX model.
-    "yml":'./weight/yolov8_data.yml',       # Input your yml path.
-    "video":'./datas/test7.mp4',            # Path to input video.
-    "outputv":'./datas/output_004.avi',     # Path to output video.
-    "conf_thres":0.2,                       # Confidence threshold
-    "iou_thres":0.2,                        # NMS IoU threshold
+YOLO_ARGS = {
+    "model_path":WEIGHTS / 'best.pt',               # Input your torch model.
+    "yml_path":WEIGHTS / 'yolov8_data.yml',         # Input your yml path.
+    "confidence_thres":0.2,                         # Confidence threshold
+    "iou_thres":0.2,                                # NMS IoU threshold
+    'reid_model':WEIGHTS / 'osnet_x0_25_msmt17.pt', #reid model path
+    'tracking_method':'botsort',                 # deepocsort, botsort, strongsort, ocsort, bytetrack
+    'half':False,                                   #use FP16 half-precision inference
+    'per_class':False,                              #not mix up classes when tracking
+    'detect_obj':None                               # Filter objects
 }
 
 # Create an instance of the Yolov8 class with the specified arguments
-DETECTION = Yolov8(onnx_model=ARGS["model"],
-                confidence_thres= ARGS["conf_thres"],
-                    iou_thres= ARGS["iou_thres"],
-                    detect_obj=None,
-                    yml_path=ARGS["yml"])
-
-
-    
-def run():
-    cap=cv2.VideoCapture(ARGS["video"])
-    # Check if camera opened successfully
-    
-    
-    ret,img_in=cap.read()
-    if ret:
-        # Get the height and width of the input image
-        DETECTION.img_height, DETECTION.img_width = img_in.shape[:2]
-    
-    out_img_h=DETECTION.img_height//2
-    out_img_w=DETECTION.img_width//2
-    
-    out = cv2.VideoWriter(ARGS["outputv"],cv2.VideoWriter_fourcc(*'DIVX'),30, (out_img_w,out_img_h))
-
-    # Read until video is completed
-    while(cap.isOpened()):
-        ret,img_in=cap.read()
-        if ret:
-            # Preprocess the image data
-            img_in = DETECTION.predict_img(img_in)
-            # resize image as frame size
-            output_image=cv2.resize(img_in,[out_img_w,out_img_h])
-            # Display the output image in a window
-            cv2.imshow('Output', output_image)
-            
-            out.write(output_image)
-
-            # Press Q on keyboard to  exit
-            if cv2.waitKey(25) & 0xFF == ord('q'):
-                break
-        
-        else:
-            break
-    
-    cv2.destroyAllWindows()
-    out.release()
-    cap.release()
-
-
+DETECTION = Yolov8(**YOLO_ARGS)
 
 
 class LoadDialog(FloatLayout):
@@ -98,20 +57,23 @@ class KivyCamera(Image):
         # display image from the texture
         self.texture = image_texture
         
-    def start_cap(self,capture, fps):
+    def start_cap(self,capture, fps,video_writer):
         self.capture = capture
+        # self.video_writer=video_writer
         Clock.schedule_interval(self.update, 1.0 / fps)
         
     def update(self, dt):
         ret, frame = self.capture.read()
         if ret:
-            frame = DETECTION.predict_img(frame)
+            frame2 = DETECTION.predict_img(frame)
+            # self.video_writer.write(frame2)
+            # time.sleep(0.03)
             # convert it to texture
-            buf1 = cv2.flip(frame, 0)
+            buf1 = cv2.flip(frame2, 0)
             buf = buf1.tostring()
             # buf = buf1.tobytes()
             image_texture = Texture.create(
-                size=(frame.shape[1], frame.shape[0]), colorfmt='bgr')
+                size=(frame2.shape[1], frame2.shape[0]), colorfmt='bgr')
             image_texture.blit_buffer(buf, colorfmt='bgr', bufferfmt='ubyte')
             # display image from the texture
             self.texture = image_texture
@@ -137,7 +99,7 @@ class Root(FloatLayout):
     text_input = ObjectProperty(None)
     capture=None
     play_btn_text=StringProperty("play")
-    my_camera=KivyCamera(source_="img.jpg")
+    my_camera=KivyCamera(source_="datas/img.jpg")
     
     result_text=StringProperty()
 
@@ -169,9 +131,10 @@ class Root(FloatLayout):
     
     def play_video(self):
         if self.capture is None:
-            # self.capture = cv2.VideoCapture(self.video_path)
-            tm_p="./datas/test7.mp4"
-            self.capture = cv2.VideoCapture(tm_p)
+            
+            self.video_path="./datas/test7.mp4"
+            
+            self.capture = cv2.VideoCapture(self.video_path)
             if (self.capture.isOpened()== False): 
                 self.result_text=str("Error opening video stream or file")
                 exit()
@@ -179,10 +142,16 @@ class Root(FloatLayout):
             if ret:
                 # Get the height and width of the input image
                 DETECTION.img_height, DETECTION.img_width = img_in.shape[:2]
-        
-            self.my_camera.start_cap(capture=self.capture, fps=30)
+            
+            # write_video_path=self.video_path[:-4]+"_output_.avi"
+            # print("dfdfdfdffdfdfdfdfdf --------",write_video_path)
+            # self.video_writer = cv2.VideoWriter(write_video_path,cv2.VideoWriter_fourcc(*'DIVX'),30, img_in.shape[:2])
+            self.video_writer=None
+            
+            self.my_camera.start_cap(capture=self.capture, fps=30,video_writer=self.video_writer)
             self.play_btn_text=str("stop")
         else:
+            # self.video_writer.release()
             self.capture.release()
             self.capture=None
             self.play_btn_text=str("play")
