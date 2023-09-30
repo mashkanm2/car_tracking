@@ -39,6 +39,8 @@ class Yolov8:
 
         self.img_height, self.img_width =480,640
         
+        self.choosed_id=[]
+        
         self._create_traker(tracking_method,reid_model,half,per_class)
     
     def _create_traker(self,tracking_method,reid_model,half,per_class):
@@ -98,7 +100,23 @@ class Yolov8:
 
         # Draw the label text on the image
         cv2.putText(img, label, (label_x, label_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1, cv2.LINE_AA)
+    
+    def draw_detections2(self,box,img):
+        x1, y1, x2, y2 = box
+        x1, y1, x2, y2=int(x1), int(y1),int(x2), int(y2)
+        img[y1:y2,x1:x2,0]=img[y1:y2,x1:x2,0]*1.35
+        img[y1:y2,x1:x2,1]=img[y1:y2,x1:x2,1]*1.35
+        # cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+        return img
         
+    def choose_object(self,img_x,img_y):
+        for trk in self.tracker.tracked_stracks:
+            print("dddddddddd " ,trk.xywh)
+            if trk.in_area(img_x,img_y):
+                print("4"*40)
+                print(trk.cls,trk.id)
+                self.choosed_id=[trk.id]
+                break
     
     @torch.no_grad()
     def predict_img(self,img_in):
@@ -107,7 +125,7 @@ class Yolov8:
         outputs=outputs[0].cpu().numpy()
             
         dets=outputs.boxes.data
-        online_targets = self.tracker.update(dets,img_in)
+        online_targets = self.tracker.update(dets,img_in,self.choosed_id)
         # online_targets=[x1,y1,x2,y2,target_ID,class,score]
         for target in online_targets:
             # Get the box, score, and class ID corresponding to the index
@@ -117,6 +135,10 @@ class Yolov8:
             class_id = int(target[6])
             # # Draw the detection on the input image
             self.draw_detections(img_in, box, t_config, class_id,t_ID)
+            
+            if len(self.choosed_id):
+                if t_ID==int(self.choosed_id[0]):
+                    img_in=self.draw_detections2(box,img_in)
     
         return img_in
 
@@ -141,7 +163,7 @@ if __name__ == '__main__':
 
     
     video_path_='./datas/test9.mp4'              # Path to input video.
-    save_path_video='./datas/output_004.avi'       # Path to output video.
+    save_path_video='./datas/test9_botsort2.avi'       # Path to output video.
 
     cap=cv2.VideoCapture(video_path_)
     # Check if camera opened successfully

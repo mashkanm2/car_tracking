@@ -28,7 +28,7 @@ YOLO_ARGS = {
     "confidence_thres":0.2,                         # Confidence threshold
     "iou_thres":0.2,                                # NMS IoU threshold
     'reid_model':WEIGHTS / 'osnet_x0_25_msmt17.pt', #reid model path
-    'tracking_method':'botsort',                 # deepocsort, botsort, strongsort, ocsort, bytetrack
+    'tracking_method':'botsort2',                 # deepocsort, botsort, strongsort, ocsort, bytetrack
     'half':False,                                   #use FP16 half-precision inference
     'per_class':False,                              #not mix up classes when tracking
     'detect_obj':None                               # Filter objects
@@ -57,6 +57,7 @@ class KivyCamera(Image):
         # display image from the texture
         self.texture = image_texture
         
+        
     def start_cap(self,capture, fps,video_writer):
         self.capture = capture
         # self.video_writer=video_writer
@@ -79,14 +80,41 @@ class KivyCamera(Image):
             self.texture = image_texture
     
     def on_touch_down(self, touch):
-        colorR = random.randint(0, 255)
-        colorG = random.randint(0, 255)
-        colorB = random.randint(0, 255)
-        self.canvas.add(Color(rgb=(colorR / 255.0, colorG / 255.0, colorB / 255.0)))
-        d = 30
-        self.canvas.add(Ellipse(pos=(touch.x - d / 2, touch.y - d / 2), size=(d, d)))
-        touch.ud['line'] = Line(points=(touch.x, touch.y))
-        self.canvas.add(touch.ud['line'])
+        # colorR = random.randint(0, 255)
+        # colorG = random.randint(0, 255)
+        # colorB = random.randint(0, 255)
+        # self.canvas.add(Color(rgb=(colorR / 255.0, colorG / 255.0, colorB / 255.0)))
+        # d = 30
+        # self.canvas.add(Ellipse(pos=(touch.x - d / 2, touch.y - d / 2), size=(d, d)))
+        # touch.ud['line'] = Line(points=(touch.x, touch.y))
+        # self.canvas.add(touch.ud['line'])
+        y_loc,x_loc=touch.y,touch.x
+        src_y,src_x=DETECTION.img_height, DETECTION.img_width
+        disp_y,disp_x=600.0,800.0
+        if (src_x/disp_x)>=(src_y/disp_y):
+            k_d=src_x/disp_x
+            
+            h_001=int(src_y/k_d)
+            padding_h=int((abs(h_001-disp_y)/2))
+            y_loc2,x_loc2=disp_y-y_loc,disp_x-x_loc
+            y_loc2=y_loc2-padding_h
+            
+            x_img=int(x_loc2*k_d)
+            y_img=int(y_loc2*k_d)
+        else:
+            k_d=src_y/disp_y
+            
+            w_001=int(src_x/k_d)
+            padding_w=int((abs(w_001-disp_x)/2))
+            y_loc2,x_loc2=disp_y-y_loc,disp_x-x_loc
+            x_loc2=x_loc2-padding_w
+            
+            x_img=int(x_loc2*k_d)
+            y_img=int(y_loc2*k_d)
+            
+            
+        DETECTION.choose_object(x_img,y_img)
+        print(f"x: {touch.x}  y: {touch.y}  x_img: {x_img}  y_img: {y_img} ")
 
     def on_touch_move(self, touch):
         # touch.ud['line'].points += [touch.x, touch.y]
